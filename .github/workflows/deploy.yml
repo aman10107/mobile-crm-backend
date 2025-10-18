@@ -51,3 +51,5 @@ jobs:
           curl -X POST \
             -H "Authorization: Token ${{ secrets.PYTHONANYWHERE_API_TOKEN }}" \
             "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PYTHONANYWHERE_USERNAME }}/webapps/${{ secrets.PYTHONANYWHERE_DOMAIN }}/reload/"
+
+
