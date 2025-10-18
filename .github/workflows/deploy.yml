@@ -11,13 +11,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
       
-      - name: Deploy to PythonAnywhere
-        uses: umuttopalak/pythonanywhere-deploy-action@v1.1.0
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v0.1.5
         with:
-          host: 'www.pythonanywhere.com'
+          host: ssh.pythonanywhere.com
           username: ${{ secrets.PYTHONANYWHERE_USERNAME }}
-          api_token: ${{ secrets.PYTHONANYWHERE_API_TOKEN }}
-          domain_name: ${{ secrets.PYTHONANYWHERE_DOMAIN }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
           script: |
             cd /home/${{ secrets.PYTHONANYWHERE_USERNAME }}/mobile-crm-backend
             git pull origin main
@@ -25,3 +25,4 @@ jobs:
             pip install -r requirements.txt
             python manage.py migrate
             python manage.py collectstatic --noinput
+            touch /var/www/${{ secrets.PYTHONANYWHERE_USERNAME }}_pythonanywhere_com_wsgi.py
