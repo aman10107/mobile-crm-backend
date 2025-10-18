@@ -11,45 +11,31 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
       
-      - name: Create and execute commands in console session
+      - name: Execute deployment commands via API
         run: |
-          # Create a new console session
-          CONSOLE_RESPONSE=$(curl -s -X POST \
-            -H "Authorization: Token ${{ secrets.PYTHONANYWHERE_API_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PYTHONANYWHERE_USERNAME }}/consoles/")
-          
-          # Extract console ID
-          CONSOLE_ID=$(echo $CONSOLE_RESPONSE | grep -o '"id":[0-9]*' | grep -o '[0-9]*')
-          echo "Console ID: $CONSOLE_ID"
-          
-          # Function to send command to console
-          send_command() {
+          # Function to execute command via PythonAnywhere API
+          execute_command() {
             curl -X POST \
               -H "Authorization: Token ${{ secrets.PYTHONANYWHERE_API_TOKEN }}" \
               -H "Content-Type: application/json" \
-              -d "{\"input\": \"$1\\n\"}" \
-              "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PYTHONANYWHERE_USERNAME }}/consoles/$CONSOLE_ID/send_input/"
-            sleep 3  # Wait for command to execute
+              -d "{\"command\": \"$1\"}" \
+              "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PYTHONANYWHERE_USERNAME }}/consoles/"
           }
           
-          # Execute deployment commands
-          send_command "cd /home/${{ secrets.PYTHONANYWHERE_USERNAME }}/mobile-crm-backend"
-          send_command "git pull origin main"
-          send_command "source ~/.virtualenvs/django-venv/bin/activate"
-          send_command "pip install -r requirements.txt"
-          send_command "python manage.py migrate"
-          send_command "python manage.py collectstatic --noinput"
+          # Pull latest code
+          execute_command "cd /home/${{ secrets.PYTHONANYWHERE_USERNAME }}/mobile-crm-backend && git pull origin main"
           
-          # Kill the console
-          curl -X DELETE \
-            -H "Authorization: Token ${{ secrets.PYTHONANYWHERE_API_TOKEN }}" \
-            "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PYTHONANYWHERE_USERNAME }}/consoles/$CONSOLE_ID/"
-      
+          # Activate virtual environment and install dependencies
+          execute_command "cd /home/${{ secrets.PYTHONANYWHERE_USERNAME }}/mobile-crm-backend && source ~/.virtualenvs/django-venv/bin/activate && pip install -r requirements.txt"
+          
+          # Run migrations
+          execute_command "cd /home/${{ secrets.PYTHONANYWHERE_USERNAME }}/mobile-crm-backend && source ~/.virtualenvs/django-venv/bin/activate && python manage.py migrate"
+          
+          # Collect static files
+          execute_command "cd /home/${{ secrets.PYTHONANYWHERE_USERNAME }}/mobile-crm-backend && source ~/.virtualenvs/django-venv/bin/activate && python manage.py collectstatic --noinput"
+          
       - name: Reload webapp
         run: |
           curl -X POST \
             -H "Authorization: Token ${{ secrets.PYTHONANYWHERE_API_TOKEN }}" \
             "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PYTHONANYWHERE_USERNAME }}/webapps/${{ secrets.PYTHONANYWHERE_DOMAIN }}/reload/"
-
-
