@@ -10,11 +10,12 @@ from  rest_framework import status
 class UserSerializer(CustomBaseModelSerializer):
     class Meta:
         model = User
-        fields = "__all__"
+        # fields = "__all__"
+        exclude = ['password']
 
 class UserDetailsSerializer(CustomBaseModelSerializer):
     shops = serializers.SerializerMethodField()
-
+    user = UserSerializer()
     class Meta:
         model = UserDetailsModel
         fields = "__all__"
