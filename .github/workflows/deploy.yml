@@ -11,18 +11,31 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
       
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v0.1.5
-        with:
-          host: ssh.pythonanywhere.com
-          username: ${{ secrets.PYTHONANYWHERE_USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
-          script: |
-            cd /home/${{ secrets.PYTHONANYWHERE_USERNAME }}/mobile-crm-backend
-            git pull origin main
-            source ~/.virtualenvs/django-venv/bin/activate
-            pip install -r requirements.txt
-            python manage.py migrate
-            python manage.py collectstatic --noinput
-            touch /var/www/${{ secrets.PYTHONANYWHERE_USERNAME }}_pythonanywhere_com_wsgi.py
+      - name: Execute deployment commands via API
+        run: |
+          # Function to execute command via PythonAnywhere API
+          execute_command() {
+            curl -X POST \
+              -H "Authorization: Token ${{ secrets.PYTHONANYWHERE_API_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              -d "{\"command\": \"$1\"}" \
+              "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PYTHONANYWHERE_USERNAME }}/consoles/"
+          }
+          
+          # Pull latest code
+          execute_command "cd /home/${{ secrets.PYTHONANYWHERE_USERNAME }}/mobile-crm-backend && git pull origin main"
+          
+          # Activate virtual environment and install dependencies
+          execute_command "cd /home/${{ secrets.PYTHONANYWHERE_USERNAME }}/mobile-crm-backend && source ~/.virtualenvs/django-venv/bin/activate && pip install -r requirements.txt"
+          
+          # Run migrations
+          execute_command "cd /home/${{ secrets.PYTHONANYWHERE_USERNAME }}/mobile-crm-backend && source ~/.virtualenvs/django-venv/bin/activate && python manage.py migrate"
+          
+          # Collect static files
+          execute_command "cd /home/${{ secrets.PYTHONANYWHERE_USERNAME }}/mobile-crm-backend && source ~/.virtualenvs/django-venv/bin/activate && python manage.py collectstatic --noinput"
+          
+      - name: Reload webapp
+        run: |
+          curl -X POST \
+            -H "Authorization: Token ${{ secrets.PYTHONANYWHERE_API_TOKEN }}" \
+            "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PYTHONANYWHERE_USERNAME }}/webapps/${{ secrets.PYTHONANYWHERE_DOMAIN }}/reload/"
