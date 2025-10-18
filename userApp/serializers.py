@@ -15,7 +15,6 @@ class UserSerializer(CustomBaseModelSerializer):
 
 class UserDetailsSerializer(CustomBaseModelSerializer):
     shops = serializers.SerializerMethodField()
-    user = UserSerializer()
     class Meta:
         model = UserDetailsModel
         fields = "__all__"

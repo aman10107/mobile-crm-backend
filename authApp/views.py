@@ -109,7 +109,7 @@ class LoginVerificationAPIView(APIView):
                 "name" : "New Shop"
             })
             if not userDetailsSerializer.is_valid():
-                return Response({"message":"Invalid user details backed issue", "detail":serializer.errors}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                return Response({"message":"Invalid user details backed issue", "detail":serializer.error_messages}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             userDetailsSerializer.save()
             if not shopDetailsErializer.is_valid():
                 return Response({"message":"Something went wrong !!", "detail":serializer.errors}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
