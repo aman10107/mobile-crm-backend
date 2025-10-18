@@ -1,18 +1,23 @@
-name: Deploy Django App
+name: Deploy to PythonAnywhere
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v0.1.5
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      
+      - name: Deploy to PythonAnywhere
+        uses: umuttopalak/pythonanywhere-deploy-action@v1.1.0
         with:
-          host: ssh.pythonanywhere.com
+          host: 'www.pythonanywhere.com'
           username: ${{ secrets.PYTHONANYWHERE_USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          api_token: ${{ secrets.PYTHONANYWHERE_API_TOKEN }}
+          domain_name: ${{ secrets.PYTHONANYWHERE_DOMAIN }}
           script: |
             cd /home/${{ secrets.PYTHONANYWHERE_USERNAME }}/mobile-crm-backend
             git pull origin main
