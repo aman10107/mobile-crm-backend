@@ -2,6 +2,7 @@ from django.db import models
 
 # Create your models here.
 
+import random
 
 class OTPVerificationModel(models.Model):
     class OTPMethods(models.TextChoices):
@@ -20,8 +21,8 @@ class OTPVerificationModel(models.Model):
 
     def generate_otp(length=4):
         otp_chars = "0123456789"
-        # return ''.join(random.choice(otp_chars) for _ in range(length))
-        return '1234'
+        return ''.join(random.choice(otp_chars) for _ in range(length))
+        # return '1234'
     
     def VerifyOTP(self, otp):
         if otp == self.otp_value:
