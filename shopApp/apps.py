@@ -1,6 +1,9 @@
+# apps.py
 from django.apps import AppConfig
 
-
-class ShopappConfig(AppConfig):
+class YourAppConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'shopApp'
+    
+    def ready(self):
+        import shopApp.signals

@@ -36,6 +36,7 @@ Thumbs.db
 
 # Django migrations (optional - include if you want to track them)
 # */migrations/*
+migrations/
 
 # Coverage reports
 htmlcov/

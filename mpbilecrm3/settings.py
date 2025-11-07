@@ -50,7 +50,8 @@ INSTALLED_APPS = [
     'customerApp',
     'authApp',
     'workJobApp',
-    'employeeApp'
+    'employeeApp',
+    'paymentRecordApp.apps.PaymentAppConfig',
 ]
 
 MIDDLEWARE = [

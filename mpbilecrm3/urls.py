@@ -23,5 +23,6 @@ urlpatterns = [
     path('user/', include("userApp.urls")),
     path('jobs/', include("workJobApp.urls")),
     path('customers/', include("customerApp.urls")),
-    path('employees/', include("employeeApp.urls"))
+    path('employees/', include("employeeApp.urls")),
+    path('payments/', include("paymentRecordApp.urls")),
 ]
