@@ -178,14 +178,17 @@ class JobDetailsModelViewSet(CustomBaseModelViewSet):
                 }, status=status.HTTP_400_BAD_REQUEST)
         
         # Calculate financial metrics using aggregation
+        # Returned jobs are excluded from every revenue/cost figure below -
+        # they were never kept as earnings.
+        not_returned = ~Q(is_return=True)
         financial_data = queryset.aggregate(
-            total_revenue=Sum('final_bill'),
-            total_parts_cost=Sum('parts_cost'),
-            total_labor_cost=Sum('labor_cost'),
-            total_discount=Sum('discount_amount'),
-            total_tax=Sum('tax_amount'),
-            average_bill=Avg('final_bill'),
-            job_count=Count('id')
+            total_revenue=Sum('final_bill', filter=not_returned),
+            total_parts_cost=Sum('parts_cost', filter=not_returned),
+            total_labor_cost=Sum('labor_cost', filter=not_returned),
+            total_discount=Sum('discount_amount', filter=not_returned),
+            total_tax=Sum('tax_amount', filter=not_returned),
+            average_bill=Avg('final_bill', filter=not_returned),
+            job_count=Count('id', filter=not_returned)
         )
         
         # Calculate derived metrics
@@ -250,7 +253,9 @@ class JobDetailsModelViewSet(CustomBaseModelViewSet):
         ).annotate(
             total_jobs=Count('id'),
             completed_jobs=Count('id', filter=Q(status__in=['completed', 'delivered'])),
-            total_revenue=Sum('final_bill'),
+            # Returned jobs still count toward a technician's job/completion
+            # totals (the work was done) but contribute nothing to revenue.
+            total_revenue=Sum('final_bill', filter=~Q(is_return=True)),
             total_hours=Sum('actual_hours'),
             first_time_fixes=Count('id', filter=Q(first_time_fix=True)),
             rework_jobs=Count('id', filter=Q(rework_required=True)),
@@ -333,15 +338,16 @@ class JobDetailsModelViewSet(CustomBaseModelViewSet):
             queryset = queryset.filter(shop_id=shop_id)
         
         # Monthly trends with financial data
+        not_returned = ~Q(is_return=True)
         monthly_data = queryset.exclude(final_bill__isnull=True).annotate(
             month=TruncMonth('created_at')
         ).values('month').annotate(
-            revenue=Sum('final_bill'),
-            parts_cost=Sum('parts_cost'),
-            labor_cost=Sum('labor_cost'),
+            revenue=Sum('final_bill', filter=not_returned),
+            parts_cost=Sum('parts_cost', filter=not_returned),
+            labor_cost=Sum('labor_cost', filter=not_returned),
             job_count=Count('id'),
             completed_jobs=Count('id', filter=Q(status__in=['completed', 'delivered'])),
-            avg_bill=Avg('final_bill')
+            avg_bill=Avg('final_bill', filter=not_returned)
         ).annotate(
             total_cost=F('parts_cost') + F('labor_cost'),
             profit=F('revenue') - F('total_cost'),
@@ -406,11 +412,13 @@ class JobDetailsModelViewSet(CustomBaseModelViewSet):
             status__in=['assigned', 'in_progress']
         ).count()
         
-        # Financial summary (jobs with bills)
+        # Financial summary (jobs with bills). Returned jobs are excluded -
+        # their bill was never kept as earnings.
+        not_returned = ~Q(is_return=True)
         billed_jobs = queryset.exclude(final_bill__isnull=True)
         monthly_revenue = current_month_jobs.exclude(final_bill__isnull=True).aggregate(
-            revenue=Sum('final_bill'),
-            profit=Sum('final_bill') - Sum('parts_cost') - Sum('labor_cost')
+            revenue=Sum('final_bill', filter=not_returned),
+            profit=Sum('final_bill', filter=not_returned) - Sum('parts_cost', filter=not_returned) - Sum('labor_cost', filter=not_returned)
         )
         
         return Response({

@@ -64,6 +64,8 @@ class CustomerBalanceModel(BaseModel):
         jobs_total = JobDetailsModel.objects.filter(
             customer = self.customer,
             status = JobDetailsModel.STATUS_CHOICES.DELIVERED
+        ).exclude(
+            is_return = True
         ).aggregate(
             total = models.Sum('final_bill')
         )

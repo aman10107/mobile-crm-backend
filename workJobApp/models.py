@@ -63,7 +63,11 @@ class JobDetailsModel(models.Model):
     labor_cost = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="Labor Cost")
     discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="Discount Amount")
     tax_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="Tax Amount")
-    
+
+    # RETURN TRACKING
+    is_return = models.BooleanField(default=False, verbose_name="Is Return")
+    returned_at = models.DateTimeField(null=True, blank=True, verbose_name="Returned At")
+
     # COMPUTED PROPERTIES FOR ANALYTICS
     @property
     def total_cost(self):
@@ -112,6 +116,20 @@ class JobDetailsModel(models.Model):
         if self.final_bill and self.actual_hours and self.actual_hours > 0:
             return self.final_bill / self.actual_hours
         return None
+
+    def save(self, *args, **kwargs):
+        was_returned = False
+        if self.pk:
+            was_returned = (
+                JobDetailsModel.objects.filter(pk=self.pk)
+                .values_list('is_return', flat=True)
+                .first()
+            ) or False
+        if self.is_return and not was_returned:
+            self.returned_at = timezone.now()
+        elif not self.is_return:
+            self.returned_at = None
+        super().save(*args, **kwargs)
 
     class Meta:
         verbose_name = "Job Detail"
