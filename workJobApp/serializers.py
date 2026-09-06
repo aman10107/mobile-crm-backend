@@ -8,6 +8,9 @@ class JobDetailsModelSerializer(CustomBaseModelSerializer):
     class Meta:
         model = JobDetailsModel
         fields = "__all__"
+        extra_kwargs = {
+            'job_no': {'required': False},
+        }
 
 
 

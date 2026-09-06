@@ -20,6 +20,7 @@ def validate_technician(value):
 from django.db import models
 from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
+import re
 
 class JobDetailsModel(models.Model):
     class STATUS_CHOICES(models.TextChoices):
@@ -113,6 +114,29 @@ class JobDetailsModel(models.Model):
         if self.final_bill and self.actual_hours and self.actual_hours > 0:
             return self.final_bill / self.actual_hours
         return None
+
+    @classmethod
+    def generate_next_job_no(cls, shop_id, exclude_pk=None):
+        """Next sequential job number for a shop, e.g. JOB-00001, JOB-00002...
+
+        Also used to preview the number a create-form would get, before the
+        job exists, so exclude_pk is optional.
+        """
+        qs = cls.objects.filter(shop_id=shop_id)
+        if exclude_pk:
+            qs = qs.exclude(pk=exclude_pk)
+        last_job_no = qs.order_by('-id').values_list('job_no', flat=True).first()
+        next_seq = 1
+        if last_job_no:
+            match = re.search(r'(\d+)$', last_job_no)
+            if match:
+                next_seq = int(match.group(1)) + 1
+        return f"JOB-{next_seq:05d}"
+
+    def save(self, *args, **kwargs):
+        if not self.job_no:
+            self.job_no = type(self).generate_next_job_no(self.shop_id, exclude_pk=self.pk)
+        super().save(*args, **kwargs)
 
     class Meta:
         verbose_name = "Job Detail"
