@@ -27,6 +27,7 @@ class JobDetailsModel(models.Model):
         IN_PROGRESS = "in_progress", "In Progress"
         COMPLETED = "completed", "Completed"
         DELIVERED = "delivered", "Delivered"
+        RETURNED = "returned", "Returned"
     
     # Your existing fields
     shop = models.ForeignKey(ShopDetailsModel, on_delete=models.CASCADE, verbose_name="Shop")
@@ -63,7 +64,7 @@ class JobDetailsModel(models.Model):
     labor_cost = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="Labor Cost")
     discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="Discount Amount")
     tax_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="Tax Amount")
-    
+
     # COMPUTED PROPERTIES FOR ANALYTICS
     @property
     def total_cost(self):
@@ -103,8 +104,8 @@ class JobDetailsModel(models.Model):
     @property
     def is_overdue(self):
         """Check if job is overdue"""
-        return (self.delivery < timezone.now().date() and 
-                self.status not in ['completed', 'delivered'])
+        return (self.delivery < timezone.now().date() and
+                self.status not in ['completed', 'delivered', 'returned'])
     
     @property
     def revenue_per_hour(self):
