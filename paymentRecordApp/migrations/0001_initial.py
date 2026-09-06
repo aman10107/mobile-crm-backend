@@ -12,7 +12,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('customerApp', '0001_initial'),
-        ('shopApp', '0004_shoppermissionsmodel'),
+        ('shopApp', '0003_shopdetailsmodel_name'),
     ]
 
     operations = [
