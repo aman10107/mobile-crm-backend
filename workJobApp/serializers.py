@@ -5,12 +5,19 @@ from rest_framework import serializers
 from auditlog.models import LogEntry
 
 class JobDetailsModelSerializer(CustomBaseModelSerializer):
+    amount_remaining = serializers.SerializerMethodField()
+
     class Meta:
         model = JobDetailsModel
         fields = "__all__"
         extra_kwargs = {
             'job_no': {'required': False},
+            'amount_paid': {'read_only': True},
+            'payment_status': {'read_only': True},
         }
+
+    def get_amount_remaining(self, obj):
+        return obj.amount_remaining
 
 
 

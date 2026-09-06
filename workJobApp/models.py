@@ -20,6 +20,7 @@ def validate_technician(value):
 from django.db import models
 from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
+from decimal import Decimal
 import re
 
 class JobDetailsModel(models.Model):
@@ -29,6 +30,11 @@ class JobDetailsModel(models.Model):
         COMPLETED = "completed", "Completed"
         DELIVERED = "delivered", "Delivered"
         RETURNED = "returned", "Returned"
+
+    class PAYMENT_STATUS_CHOICES(models.TextChoices):
+        UNPAID = 'unpaid', 'Unpaid'
+        PARTIALLY_PAID = 'partially_paid', 'Partially Paid'
+        PAID = 'paid', 'Paid'
     
     # Your existing fields
     shop = models.ForeignKey(ShopDetailsModel, on_delete=models.CASCADE, verbose_name="Shop")
@@ -65,6 +71,10 @@ class JobDetailsModel(models.Model):
     labor_cost = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="Labor Cost")
     discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="Discount Amount")
     tax_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="Tax Amount")
+
+    # PAYMENT TRACKING - kept in sync with payment_allocations, see recalculate_payment_status()
+    payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES.choices, default=PAYMENT_STATUS_CHOICES.UNPAID, verbose_name="Payment Status")
+    amount_paid = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'), verbose_name="Amount Paid")
 
     # COMPUTED PROPERTIES FOR ANALYTICS
     @property
@@ -115,6 +125,31 @@ class JobDetailsModel(models.Model):
             return self.final_bill / self.actual_hours
         return None
 
+    @property
+    def amount_remaining(self):
+        """How much of final_bill is still unpaid. None if there's no bill yet."""
+        if self.final_bill is None:
+            return None
+        remaining = self.final_bill - self.amount_paid
+        return remaining if remaining > 0 else Decimal('0.00')
+
+    def recalculate_payment_status(self):
+        """Recompute amount_paid/payment_status from this job's payment_allocations.
+
+        Uses a direct .update() (not save()) so it never re-triggers
+        JobDetailsModel.save() or its signals.
+        """
+        total_paid = self.payment_allocations.aggregate(t=models.Sum('amount'))['t'] or Decimal('0.00')
+        if not self.final_bill or total_paid <= 0:
+            new_status = self.PAYMENT_STATUS_CHOICES.UNPAID
+        elif total_paid >= self.final_bill:
+            new_status = self.PAYMENT_STATUS_CHOICES.PAID
+        else:
+            new_status = self.PAYMENT_STATUS_CHOICES.PARTIALLY_PAID
+        JobDetailsModel.objects.filter(pk=self.pk).update(amount_paid=total_paid, payment_status=new_status)
+        self.amount_paid = total_paid
+        self.payment_status = new_status
+
     @classmethod
     def generate_next_job_no(cls, shop_id, exclude_pk=None):
         """Next sequential job number for a shop, e.g. JOB-00001, JOB-00002...
@@ -137,6 +172,9 @@ class JobDetailsModel(models.Model):
         if not self.job_no:
             self.job_no = type(self).generate_next_job_no(self.shop_id, exclude_pk=self.pk)
         super().save(*args, **kwargs)
+        # final_bill may have just changed, which changes amount_remaining even
+        # though amount_paid didn't - keep payment_status in sync either way.
+        self.recalculate_payment_status()
 
     class Meta:
         verbose_name = "Job Detail"
