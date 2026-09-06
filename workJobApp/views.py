@@ -180,7 +180,7 @@ class JobDetailsModelViewSet(CustomBaseModelViewSet):
         # Calculate financial metrics using aggregation
         # Returned jobs are excluded from every revenue/cost figure below -
         # they were never kept as earnings.
-        not_returned = ~Q(is_return=True)
+        not_returned = ~Q(status=JobDetailsModel.STATUS_CHOICES.RETURNED)
         financial_data = queryset.aggregate(
             total_revenue=Sum('final_bill', filter=not_returned),
             total_parts_cost=Sum('parts_cost', filter=not_returned),
@@ -255,7 +255,7 @@ class JobDetailsModelViewSet(CustomBaseModelViewSet):
             completed_jobs=Count('id', filter=Q(status__in=['completed', 'delivered'])),
             # Returned jobs still count toward a technician's job/completion
             # totals (the work was done) but contribute nothing to revenue.
-            total_revenue=Sum('final_bill', filter=~Q(is_return=True)),
+            total_revenue=Sum('final_bill', filter=~Q(status=JobDetailsModel.STATUS_CHOICES.RETURNED)),
             total_hours=Sum('actual_hours'),
             first_time_fixes=Count('id', filter=Q(first_time_fix=True)),
             rework_jobs=Count('id', filter=Q(rework_required=True)),
@@ -338,7 +338,7 @@ class JobDetailsModelViewSet(CustomBaseModelViewSet):
             queryset = queryset.filter(shop_id=shop_id)
         
         # Monthly trends with financial data
-        not_returned = ~Q(is_return=True)
+        not_returned = ~Q(status=JobDetailsModel.STATUS_CHOICES.RETURNED)
         monthly_data = queryset.exclude(final_bill__isnull=True).annotate(
             month=TruncMonth('created_at')
         ).values('month').annotate(
@@ -414,7 +414,7 @@ class JobDetailsModelViewSet(CustomBaseModelViewSet):
         
         # Financial summary (jobs with bills). Returned jobs are excluded -
         # their bill was never kept as earnings.
-        not_returned = ~Q(is_return=True)
+        not_returned = ~Q(status=JobDetailsModel.STATUS_CHOICES.RETURNED)
         billed_jobs = queryset.exclude(final_bill__isnull=True)
         monthly_revenue = current_month_jobs.exclude(final_bill__isnull=True).aggregate(
             revenue=Sum('final_bill', filter=not_returned),

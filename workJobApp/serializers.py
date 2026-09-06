@@ -8,9 +8,6 @@ class JobDetailsModelSerializer(CustomBaseModelSerializer):
     class Meta:
         model = JobDetailsModel
         fields = "__all__"
-        extra_kwargs = {
-            'returned_at': {'read_only': True},
-        }
 
 
 

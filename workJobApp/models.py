@@ -27,6 +27,7 @@ class JobDetailsModel(models.Model):
         IN_PROGRESS = "in_progress", "In Progress"
         COMPLETED = "completed", "Completed"
         DELIVERED = "delivered", "Delivered"
+        RETURNED = "returned", "Returned"
     
     # Your existing fields
     shop = models.ForeignKey(ShopDetailsModel, on_delete=models.CASCADE, verbose_name="Shop")
@@ -63,10 +64,6 @@ class JobDetailsModel(models.Model):
     labor_cost = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="Labor Cost")
     discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="Discount Amount")
     tax_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="Tax Amount")
-
-    # RETURN TRACKING
-    is_return = models.BooleanField(default=False, verbose_name="Is Return")
-    returned_at = models.DateTimeField(null=True, blank=True, verbose_name="Returned At")
 
     # COMPUTED PROPERTIES FOR ANALYTICS
     @property
@@ -107,8 +104,8 @@ class JobDetailsModel(models.Model):
     @property
     def is_overdue(self):
         """Check if job is overdue"""
-        return (self.delivery < timezone.now().date() and 
-                self.status not in ['completed', 'delivered'])
+        return (self.delivery < timezone.now().date() and
+                self.status not in ['completed', 'delivered', 'returned'])
     
     @property
     def revenue_per_hour(self):
@@ -116,20 +113,6 @@ class JobDetailsModel(models.Model):
         if self.final_bill and self.actual_hours and self.actual_hours > 0:
             return self.final_bill / self.actual_hours
         return None
-
-    def save(self, *args, **kwargs):
-        was_returned = False
-        if self.pk:
-            was_returned = (
-                JobDetailsModel.objects.filter(pk=self.pk)
-                .values_list('is_return', flat=True)
-                .first()
-            ) or False
-        if self.is_return and not was_returned:
-            self.returned_at = timezone.now()
-        elif not self.is_return:
-            self.returned_at = None
-        super().save(*args, **kwargs)
 
     class Meta:
         verbose_name = "Job Detail"
