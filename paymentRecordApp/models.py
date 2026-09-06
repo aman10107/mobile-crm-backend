@@ -73,3 +73,29 @@ class CustomerBalanceModel(BaseModel):
         self.total_paid = total_paid
         self.last_payment_date = result['last_date']
         self.save()
+
+
+class PaymentAllocationModel(BaseModel):
+    """How much of a payment was applied to a specific job's bill"""
+    payment = models.ForeignKey(
+        PaymentRecordDetailsModel,
+        on_delete=models.CASCADE,
+        related_name='job_allocations'
+    )
+    job = models.ForeignKey(
+        'workJobApp.JobDetailsModel',
+        on_delete=models.CASCADE,
+        related_name='payment_allocations'
+    )
+    amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))]
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.job.job_no} - ₹{self.amount}"
