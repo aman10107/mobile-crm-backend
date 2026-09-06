@@ -59,6 +59,19 @@ class JobDetailsModelViewSet(CustomBaseModelViewSet):
         # If owner, proceed with deletion
         super().perform_destroy(instance)
 
+    @action(detail=False, methods=['get'], url_path='next-job-no')
+    def next_job_no(self, request):
+        """
+        GET /jobs/next-job-no/?shop=<id>
+        Preview the job number a new job for this shop would get, so the
+        create form can show it as an editable suggestion before saving.
+        """
+        shop_id = request.query_params.get('shop')
+        if not shop_id:
+            return Response({'error': 'shop is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({'job_no': JobDetailsModel.generate_next_job_no(shop_id)})
+
     # ANALYTICS ENDPOINTS
     @action(detail=False, methods=['get'], url_path='analytics/performance')
     def performance_analytics(self, request):

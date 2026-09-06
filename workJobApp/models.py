@@ -114,16 +114,17 @@ class JobDetailsModel(models.Model):
             return self.final_bill / self.actual_hours
         return None
 
-    def _generate_job_no(self):
-        """Next sequential job number for this shop, e.g. JOB-00001, JOB-00002..."""
-        last_job_no = (
-            JobDetailsModel.objects
-            .filter(shop_id=self.shop_id)
-            .exclude(pk=self.pk)
-            .order_by('-id')
-            .values_list('job_no', flat=True)
-            .first()
-        )
+    @classmethod
+    def generate_next_job_no(cls, shop_id, exclude_pk=None):
+        """Next sequential job number for a shop, e.g. JOB-00001, JOB-00002...
+
+        Also used to preview the number a create-form would get, before the
+        job exists, so exclude_pk is optional.
+        """
+        qs = cls.objects.filter(shop_id=shop_id)
+        if exclude_pk:
+            qs = qs.exclude(pk=exclude_pk)
+        last_job_no = qs.order_by('-id').values_list('job_no', flat=True).first()
         next_seq = 1
         if last_job_no:
             match = re.search(r'(\d+)$', last_job_no)
@@ -133,7 +134,7 @@ class JobDetailsModel(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.job_no:
-            self.job_no = self._generate_job_no()
+            self.job_no = type(self).generate_next_job_no(self.shop_id, exclude_pk=self.pk)
         super().save(*args, **kwargs)
 
     class Meta:

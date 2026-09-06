@@ -9,7 +9,7 @@ class JobDetailsModelSerializer(CustomBaseModelSerializer):
         model = JobDetailsModel
         fields = "__all__"
         extra_kwargs = {
-            'job_no': {'read_only': True},
+            'job_no': {'required': False},
         }
 
 
