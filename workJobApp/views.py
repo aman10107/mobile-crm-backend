@@ -33,7 +33,11 @@ class JobDetailsModelViewSet(CustomBaseModelViewSet):
     filterset_class = JobDetailsModelFilterSet
     permission_classes = [IsAuthenticated] 
     ordering_fields = '__all__'
-    search_fields = ['job_no', 'model', 'job_details', 'note', 'feedback']
+    search_fields = [
+        'job_no', 'model', 'job_details', 'note', 'feedback',
+        'customer__first_name', 'customer__last_name', 'customer__phone_number',
+        'technician__first_name', 'technician__last_name',
+    ]
 
     def get_queryset(self):
         """
@@ -174,7 +178,11 @@ class JobDetailsModelViewSet(CustomBaseModelViewSet):
         date_to = request.query_params.get('date_to')
         
         # Build queryset with shop filter
-        queryset = JobDetailsModel.objects.exclude(final_bill__isnull=True)
+        # Profit only counts once the job is settled: delivered (revenue + costs) or
+        # returned (costs only, no revenue). Undelivered jobs are excluded entirely.
+        queryset = JobDetailsModel.objects.exclude(final_bill__isnull=True).filter(
+            status__in=[JobDetailsModel.STATUS_CHOICES.DELIVERED, JobDetailsModel.STATUS_CHOICES.RETURNED]
+        )
         if shop_id:
             queryset = queryset.filter(shop_id=shop_id)
         
@@ -190,20 +198,24 @@ class JobDetailsModelViewSet(CustomBaseModelViewSet):
                     'error': 'Invalid date format. Use YYYY-MM-DD'
                 }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Calculate financial metrics using aggregation
-        # Returned jobs are excluded from every revenue/cost figure below -
-        # they were never kept as earnings.
+        # Calculate financial metrics using aggregation.
+        # Revenue excludes returned jobs (no income was kept).
+        # Costs INCLUDE returned jobs — parts and labor were genuinely spent
+        # even if the device was handed back, so excluding them would overstate profit.
         not_returned = ~Q(status=JobDetailsModel.STATUS_CHOICES.RETURNED)
         financial_data = queryset.aggregate(
-            total_revenue=Sum('final_bill', filter=not_returned),
-            total_parts_cost=Sum('parts_cost', filter=not_returned),
-            total_labor_cost=Sum('labor_cost', filter=not_returned),
+            total_revenue=Sum('final_bill', filter=not_returned),   # only non-returned
+            total_parts_cost=Sum('parts_cost'),                     # ALL jobs — money was spent
+            total_labor_cost=Sum('labor_cost'),                     # ALL jobs — money was spent
+            returned_parts_cost=Sum('parts_cost', filter=~not_returned),   # for visibility
+            returned_labor_cost=Sum('labor_cost', filter=~not_returned),   # for visibility
             total_discount=Sum('discount_amount', filter=not_returned),
             total_tax=Sum('tax_amount', filter=not_returned),
             average_bill=Avg('final_bill', filter=not_returned),
-            job_count=Count('id', filter=not_returned)
+            job_count=Count('id', filter=not_returned),
+            returned_job_count=Count('id', filter=~not_returned),
         )
-        
+
         # Calculate derived metrics
         total_revenue = financial_data['total_revenue'] or 0
         total_parts_cost = financial_data['total_parts_cost'] or 0
@@ -223,8 +235,18 @@ class JobDetailsModelViewSet(CustomBaseModelViewSet):
             'total_discounts': float(financial_data['total_discount'] or 0),
             'total_tax': float(financial_data['total_tax'] or 0),
             'jobs_analyzed': financial_data['job_count'],
+            # Returned job breakdown — costs were real even though no revenue was kept
+            'returned_jobs': {
+                'count': financial_data['returned_job_count'] or 0,
+                'parts_cost_lost': float(financial_data['returned_parts_cost'] or 0),
+                'labor_cost_lost': float(financial_data['returned_labor_cost'] or 0),
+                'total_cost_lost': float(
+                    (financial_data['returned_parts_cost'] or 0) +
+                    (financial_data['returned_labor_cost'] or 0)
+                ),
+            },
             'filters_applied': {
-                'shop': shop_id,  # Changed from shop_id to shop
+                'shop': shop_id,
                 'date_from': date_from,
                 'date_to': date_to
             }
@@ -350,19 +372,27 @@ class JobDetailsModelViewSet(CustomBaseModelViewSet):
         if shop_id:
             queryset = queryset.filter(shop_id=shop_id)
         
-        # Monthly trends with financial data
+        # Monthly trends with financial data.
+        # Revenue excludes returned jobs; costs include ALL jobs (money was genuinely spent).
+        # IMPORTANT: annotation names must NOT shadow field names (e.g. don't name an
+        # annotation 'parts_cost' when the field is also 'parts_cost') — Django will
+        # treat the annotation as an aggregate and raise a FieldError on subsequent Sums.
         not_returned = ~Q(status=JobDetailsModel.STATUS_CHOICES.RETURNED)
         monthly_data = queryset.exclude(final_bill__isnull=True).annotate(
             month=TruncMonth('created_at')
         ).values('month').annotate(
             revenue=Sum('final_bill', filter=not_returned),
-            parts_cost=Sum('parts_cost', filter=not_returned),
-            labor_cost=Sum('labor_cost', filter=not_returned),
+            total_parts_cost=Sum('parts_cost'),                          # ALL jobs — money spent
+            total_labor_cost=Sum('labor_cost'),                          # ALL jobs — money spent
+            ret_parts_cost=Sum('parts_cost', filter=~not_returned),      # returned jobs only
+            ret_labor_cost=Sum('labor_cost', filter=~not_returned),      # returned jobs only
             job_count=Count('id'),
+            returned_jobs=Count('id', filter=~not_returned),
             completed_jobs=Count('id', filter=Q(status__in=['completed', 'delivered'])),
             avg_bill=Avg('final_bill', filter=not_returned)
         ).annotate(
-            total_cost=F('parts_cost') + F('labor_cost'),
+            total_cost=F('total_parts_cost') + F('total_labor_cost'),
+            returned_cost=F('ret_parts_cost') + F('ret_labor_cost'),
             profit=F('revenue') - F('total_cost'),
             profit_margin=Case(
                 When(revenue__gt=0, then=F('profit') / F('revenue') * 100),
@@ -375,7 +405,7 @@ class JobDetailsModelViewSet(CustomBaseModelViewSet):
                 output_field=DecimalField()
             )
         ).order_by('month')
-        
+
         # Format response
         trends = []
         for data in monthly_data:
@@ -387,17 +417,20 @@ class JobDetailsModelViewSet(CustomBaseModelViewSet):
                 'profit_margin': float(data['profit_margin'] or 0),
                 'job_count': data['job_count'],
                 'completed_jobs': data['completed_jobs'],
+                'returned_jobs': data['returned_jobs'],
+                'returned_cost_lost': float(data['returned_cost'] or 0),
                 'completion_rate': float(data['completion_rate'] or 0),
                 'average_bill': float(data['avg_bill'] or 0)
             })
-        
+
         return Response({
             'monthly_trends': trends,
             'period_months': months,
             'filters_applied': {
-                'shop': shop_id  # Changed from shop_id to shop
+                'shop': shop_id
             }
         })
+
 
     @action(detail=False, methods=['get'], url_path='analytics/dashboard')
     def dashboard_summary(self, request):
@@ -424,16 +457,20 @@ class JobDetailsModelViewSet(CustomBaseModelViewSet):
             delivery__lt=timezone.now().date(),
             status__in=['assigned', 'in_progress']
         ).count()
-        
-        # Financial summary (jobs with bills). Returned jobs are excluded -
-        # their bill was never kept as earnings.
+        # Financial summary.
+        # Revenue excludes returned jobs (no income kept).
+        # Costs include ALL jobs — the money was spent regardless of return.
         not_returned = ~Q(status=JobDetailsModel.STATUS_CHOICES.RETURNED)
-        billed_jobs = queryset.exclude(final_bill__isnull=True)
-        monthly_revenue = current_month_jobs.exclude(final_bill__isnull=True).aggregate(
-            revenue=Sum('final_bill', filter=not_returned),
-            profit=Sum('final_bill', filter=not_returned) - Sum('parts_cost', filter=not_returned) - Sum('labor_cost', filter=not_returned)
+        # Same rule as financial analytics: only delivered/returned jobs count toward profit.
+        monthly_billed = current_month_jobs.exclude(final_bill__isnull=True).filter(
+            status__in=[JobDetailsModel.STATUS_CHOICES.DELIVERED, JobDetailsModel.STATUS_CHOICES.RETURNED]
         )
-        
+        monthly_revenue = monthly_billed.aggregate(
+            revenue=Sum('final_bill', filter=not_returned),
+            # profit = revenue (non-returned) minus ALL costs (including returned)
+            profit=Sum('final_bill', filter=not_returned) - Sum('parts_cost') - Sum('labor_cost')
+        )
+
         return Response({
             'summary': {
                 'total_jobs': total_jobs,
@@ -445,9 +482,10 @@ class JobDetailsModelViewSet(CustomBaseModelViewSet):
                 'current_month_profit': float(monthly_revenue['profit'] or 0)
             },
             'filters_applied': {
-                'shop': shop_id  # Changed from shop_id to shop
+                'shop': shop_id
             }
         })
+
 
 
 class JobAuditLogView(APIView):
